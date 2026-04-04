@@ -2,8 +2,6 @@ import json
 from unittest import TestCase
 from unittest.mock import patch, MagicMock
 
-import responses
-
 from youtube_transcript_api import (
     YouTubeTranscriptApi,
     FetchedTranscript,
