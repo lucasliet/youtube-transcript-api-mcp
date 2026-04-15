@@ -8,13 +8,12 @@ from youtube_transcript_api import (
     FetchedTranscriptSnippet,
     TranscriptsDisabled,
 )
+from youtube_transcript_api._factory import _create_api, _BROWSER_USER_AGENT
 from youtube_transcript_api._mcp import (
     fetch_transcript,
     list_transcripts,
     fetch_transcript_formatted,
-    _create_api,
     _handle_error,
-    _BROWSER_USER_AGENT,
 )
 
 
@@ -32,7 +31,7 @@ def _make_transcript(video_id="abc123"):
 
 
 class TestCreateApi(TestCase):
-    @patch("youtube_transcript_api._mcp.Session")
+    @patch("youtube_transcript_api._factory.Session")
     def test_session_has_browser_user_agent(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -45,6 +44,27 @@ class TestCreateApi(TestCase):
 
     def test_returns_youtube_transcript_api_instance(self):
         api = _create_api()
+        self.assertIsInstance(api, YouTubeTranscriptApi)
+
+    @patch("youtube_transcript_api._factory.WebshareProxyConfig")
+    @patch("youtube_transcript_api._factory.Session")
+    @patch.dict(
+        "os.environ", {"WEBSHARE_USERNAME": "testuser", "WEBSHARE_PASSWORD": "testpass"}
+    )
+    def test_creates_api_with_proxy_when_env_vars_set(
+        self, mock_session_cls, mock_proxy_config_cls
+    ):
+        mock_session = MagicMock()
+        mock_session_cls.return_value = mock_session
+        mock_proxy_config = MagicMock()
+        mock_proxy_config_cls.return_value = mock_proxy_config
+
+        api = _create_api()
+
+        mock_proxy_config_cls.assert_called_once_with(
+            proxy_username="testuser",
+            proxy_password="testpass",
+        )
         self.assertIsInstance(api, YouTubeTranscriptApi)
 
 

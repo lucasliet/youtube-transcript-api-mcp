@@ -1,11 +1,9 @@
-from dataclasses import asdict
-from typing import List, Literal, Optional
+from typing import List, Literal
 
 from fastapi import APIRouter, Query
 from fastapi.responses import PlainTextResponse, JSONResponse
 from pydantic import BaseModel
 
-from ._api import YouTubeTranscriptApi
 from ._errors import (
     AgeRestricted,
     CouldNotRetrieveTranscript,
@@ -19,6 +17,7 @@ from ._errors import (
     VideoUnavailable,
     YouTubeTranscriptApiException,
 )
+from ._factory import _create_api
 from .formatters import FormatterLoader
 
 rest_router = APIRouter(prefix="/api", tags=["transcripts"])
@@ -90,20 +89,7 @@ def _map_exception(exc: YouTubeTranscriptApiException) -> JSONResponse:
         return _error_response(exc, 403)
     if isinstance(exc, CouldNotRetrieveTranscript):
         return _error_response(exc, 500)
-    return _error_response(exc, 500)
-
-
-def _create_api() -> YouTubeTranscriptApi:
-    from requests import Session
-
-    _BROWSER_USER_AGENT = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/131.0.0.0 Safari/537.36"
-    )
-    session = Session()
-    session.headers.update({"User-Agent": _BROWSER_USER_AGENT})
-    return YouTubeTranscriptApi(http_client=session)
+    return _error_response(exc, 500)  # pragma: no cover
 
 
 @rest_router.get(
@@ -258,7 +244,7 @@ def fetch_transcript_formatted(
 
     try:
         formatter = _FORMATTER_LOADER.load(format)
-    except FormatterLoader.UnknownFormatterType as exc:
+    except FormatterLoader.UnknownFormatterType as exc:  # pragma: no cover
         return _error_response(exc, 400)
 
     formatted = formatter.format_transcript(transcript)

@@ -66,6 +66,7 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.8"
+poethepoet = "^0.44.0"
 
 [tool.coverage.run]
 source = ["youtube_transcript_api"]
