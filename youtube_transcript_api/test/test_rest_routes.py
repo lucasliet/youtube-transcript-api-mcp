@@ -12,8 +12,13 @@ from youtube_transcript_api import (
     InvalidVideoId,
     AgeRestricted,
     NoTranscriptFound,
+    NotTranslatable,
+    TranslationLanguageNotAvailable,
+    RequestBlocked,
+    IpBlocked,
+    CouldNotRetrieveTranscript,
+    YouTubeTranscriptApiException,
 )
-from youtube_transcript_api._rest_routes import _create_api
 
 
 def _make_transcript(video_id="abc123"):
@@ -343,3 +348,130 @@ class TestFetchTranscriptFormatted(TestCase):
 
         self.assertEqual(response.status_code, 200)
         mock_api.fetch.assert_called_once_with("abc123", languages=["de"])
+
+
+class TestFetchTranscriptFormattedErrorHandling(TestCase):
+    @patch("youtube_transcript_api._rest_routes._create_api")
+    def test_fetch_formatted_error_from_api_returns_error_response(
+        self, mock_create_api
+    ):
+        mock_api = MagicMock()
+        mock_api.fetch.side_effect = CouldNotRetrieveTranscript("error")
+        mock_create_api.return_value = mock_api
+
+        client = _get_client()
+        response = client.get("/api/videos/abc123/transcript/formatted")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()["type"], "CouldNotRetrieveTranscript")
+
+    @patch("youtube_transcript_api._rest_routes._create_api")
+    @patch("youtube_transcript_api._rest_routes._FORMATTER_LOADER")
+    def test_fetch_formatted_unknown_formatter_type_returns_400(
+        self, mock_loader, mock_create_api
+    ):
+        from youtube_transcript_api.formatters import FormatterLoader
+
+        mock_api = MagicMock()
+        mock_api.fetch.return_value = _make_transcript()
+        mock_create_api.return_value = mock_api
+
+        mock_loader.load.side_effect = FormatterLoader.UnknownFormatterType("xml")
+
+        client = _get_client()
+        response = client.get("/api/videos/abc123/transcript/formatted?format=text")
+
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertEqual(data["type"], "UnknownFormatterType")
+
+
+class TestTranslateErrorMapping(TestCase):
+    @patch("youtube_transcript_api._rest_routes._create_api")
+    def test_not_translatable_returns_400(self, mock_create_api):
+        mock_api = MagicMock()
+        mock_api.list.side_effect = NotTranslatable("not translatable")
+        mock_create_api.return_value = mock_api
+
+        client = _get_client()
+        response = client.get(
+            "/api/videos/abc123/transcript/translate?target_language=es"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["type"], "NotTranslatable")
+
+    @patch("youtube_transcript_api._rest_routes._create_api")
+    def test_translation_language_not_available_returns_400(self, mock_create_api):
+        mock_api = MagicMock()
+        mock_api.list.side_effect = TranslationLanguageNotAvailable(
+            "translation not available"
+        )
+        mock_create_api.return_value = mock_api
+
+        client = _get_client()
+        response = client.get(
+            "/api/videos/abc123/transcript/translate?target_language=es"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["type"], "TranslationLanguageNotAvailable")
+
+
+class TestBlockedErrorMapping(TestCase):
+    @patch("youtube_transcript_api._rest_routes._create_api")
+    def test_request_blocked_returns_403(self, mock_create_api):
+        mock_api = MagicMock()
+        mock_api.fetch.side_effect = RequestBlocked("request blocked")
+        mock_create_api.return_value = mock_api
+
+        client = _get_client()
+        response = client.get("/api/videos/abc123/transcript")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["type"], "RequestBlocked")
+
+    @patch("youtube_transcript_api._rest_routes._create_api")
+    def test_ip_blocked_returns_403(self, mock_create_api):
+        mock_api = MagicMock()
+        mock_api.fetch.side_effect = IpBlocked("ip blocked")
+        mock_create_api.return_value = mock_api
+
+        client = _get_client()
+        response = client.get("/api/videos/abc123/transcript")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["type"], "IpBlocked")
+
+    @patch("youtube_transcript_api._rest_routes._create_api")
+    def test_generic_exception_returns_500(self, mock_create_api):
+        mock_api = MagicMock()
+        mock_api.fetch.side_effect = YouTubeTranscriptApiException("generic error")
+        mock_create_api.return_value = mock_api
+
+        client = _get_client()
+        response = client.get("/api/videos/abc123/transcript")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()["type"], "YouTubeTranscriptApiException")
+
+
+class TestCreateApiFunction(TestCase):
+    @patch("youtube_transcript_api._rest_routes.YouTubeTranscriptApi")
+    @patch("requests.Session")
+    def test_create_api_sets_browser_user_agent(self, mock_session_cls, mock_api_cls):
+        from youtube_transcript_api._rest_routes import _create_api
+
+        mock_session = MagicMock()
+        mock_session_cls.return_value = mock_session
+        mock_api_instance = MagicMock()
+        mock_api_cls.return_value = mock_api_instance
+
+        result = _create_api()
+
+        mock_session.headers.update.assert_called_once()
+        call_args = mock_session.headers.update.call_args[0][0]
+        self.assertIn("User-Agent", call_args)
+        self.assertIn("Mozilla/5.0", call_args["User-Agent"])
+        mock_api_cls.assert_called_once_with(http_client=mock_session)
+        self.assertEqual(result, mock_api_instance)

@@ -1,5 +1,4 @@
-from dataclasses import asdict
-from typing import List, Literal, Optional
+from typing import List, Literal
 
 from fastapi import APIRouter, Query
 from fastapi.responses import PlainTextResponse, JSONResponse
