@@ -2,12 +2,13 @@ from dataclasses import asdict
 from typing import List, Optional
 
 import json
+from requests import Session
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
+from ._api import YouTubeTranscriptApi
 from ._errors import YouTubeTranscriptApiException
-from ._factory import _create_api
 from .formatters import FormatterLoader
 
 mcp = FastMCP(
@@ -20,7 +21,20 @@ mcp = FastMCP(
     ),
 )
 
+_BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+
 _FORMATTER_LOADER = FormatterLoader()
+
+
+def _create_api() -> YouTubeTranscriptApi:
+    """Create a YouTubeTranscriptApi with a browser-like User-Agent."""
+    session = Session()
+    session.headers.update({"User-Agent": _BROWSER_USER_AGENT})
+    return YouTubeTranscriptApi(http_client=session)
 
 
 def _handle_error(exc: YouTubeTranscriptApiException) -> str:
